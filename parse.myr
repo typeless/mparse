@@ -139,6 +139,16 @@ const traitdef = {p
 	;;
 
 	match tokpeek(p)
+	| (l, `Twith):
+		match traitspec(p)
+		| `std.Some specs:
+			setwith(ty, specs)
+		| `std.None:
+		;;
+	| _:
+	;;
+
+	match tokpeek(p)
 	| (l, `Tasn):
 		toknext(p)
 		dcls = traitbody(p)
@@ -224,6 +234,12 @@ const impldef = {p
 		auxty = tylist(p)
 	| _:
 		auxty = [][:]
+	;;
+
+	match traitspec(p)
+	| `std.Some specs:
+		setwith(ty, specs)
+	| `std.None:
 	;;
 
 	match tokpeek(p)
@@ -406,6 +422,16 @@ const vardcls = {p, isglobl, vis
 		match tokpeek(p)
 		| (_, `Tcomma):	toknext(p)
 		| (_, _):	break
+		;;
+	;;
+
+	if isgeneric
+		match traitspec(p)
+		| `std.Some specs:
+			for d : dcls
+				setwith(d.ty, specs)
+			;;
+		| `std.None:
 		;;
 	;;
 	-> `std.Some dcls
@@ -1018,6 +1044,17 @@ const funcexpr = {p, loc
 	| (l, tokbad):	err(l, "expected function arguments near {}\n", tokbad)
 	;;
 
+	match tokpeek(p)
+	| (l, `Twith):
+		match traitspec(p)
+		| `std.Some specs:
+			setwith(ty, specs)
+		| `std.None:
+		;;
+	| (l, `Tendln):
+	| _:
+	;;
+
 	blk = blkbody(p, st)
 
 	optendlns(p)
@@ -1431,7 +1468,7 @@ const typ = {p
 	| (l, `Toparen):	ty = typaren(p, l)
 	| (l, `Tellipsis):	ty = mkty(l, `Tyvalist)
 	| (l, `Tvoidlit):	ty = mkty(l, `Tyvoid)
-	| (l, `Ttyparam n):	ty = typaramtail(p, l, n)
+	| (l, `Ttyparam n):	ty = mkty(l, `Typaram (n, [][:]))
 	| (l, `Tident id):
 		tokunget(p)
 		ty = tyname(p)
@@ -1447,40 +1484,133 @@ const typaram = {p
 	match tokpeek(p)
 	| (l, `Ttyparam n):
 		toknext(p)
-		-> `std.Some typaramtail(p, l, n)
+		-> `std.Some mkty(l, `Typaram (n, [][:]))
 	| (l, _):
 		-> `std.None
 	;;
 }
 
-const typaramtail = {p, loc, name
-	var traits
+const setwith = {ty : tydef#,  specs
+	for (trnames, primty, _) : specs
+		match ty.ty
+		| `Typaram (pname, names):
+			match primty.ty
+			| `Typaram (qname, _):
+				if std.sleq(pname, qname)
+					for trname : trnames
+						std.slpush(&names, trname)
+					;;
+				;;
+			| _:
+			;;
+		| `Tyname n:
+			for p : n.params
+				setwith(p, specs)
+			;;
+			for a : n.args
+				setwith(a, specs)
+			;;
+		| `Tyunres n:
+			for p : n.params
+				setwith(p, specs)
+			;;
+			for a : n.args
+				setwith(a, specs)
+			;;
+		| `Tyslice t:
+			setwith(t, specs)
+		| `Typtr t:
+			setwith(t, specs)
+		| `Tyarray (t, _):
+			setwith(t, specs)
+		| `Tystruct dcls:
+			for d : dcls
+				setwith(d.ty, specs)
+			;;
+		| `Tyunion ucons:
+			for u : ucons
+				match u.ety
+				| `std.Some t: setwith(t, specs)
+				| `std.None:
+				;;
+			;;
+		| `Tytuple etypes:
+			for t : etypes
+				setwith(t, specs)
+			;;
+		| `Tyfunc etypes:
+			for t : etypes
+				setwith(t, specs)
+			;;
+		| _: break
+		;;
+	;;
+}
 
-	traits = [][:]
+const traitspec = {p
 	match tokpeek(p)
 	| (l, `Twith):
 		toknext(p)
-		traits = traitlist(p)
+		-> `std.Some traits(p)
 	| _:
+		-> `std.None
 	;;
-	-> mkty(loc, `Typaram (name, traits))
+}
+
+const traits = {p
+	var specs : (name[:], tydef#, tydef#[:])[:]
+
+	specs = [][:]
+	while true
+		match tokpeek(p)
+		| (l, `Tident id):
+			match traitvar(p)
+			| `std.Some tvar:
+				std.slpush(&specs, tvar)
+			| `std.None:
+				break
+			;;
+		| _: break
+		;;
+
+		match tokpeek(p)
+		| (l, `Tcomma): listsep(p)
+		| _:
+		;;
+	;;
+	-> specs
+}
+
+const traitvar = {p
+	var trs, param : tydef#, auxty
+
+	match traitlist(p)
+	| `std.Some list: trs = list
+	| `std.None: -> `std.None
+	;;
+	match typaram(p)
+	| `std.Some ty: param = ty
+	| `std.None: err(p.loc, "expected a type variable\n")
+	;;
+	match tokpeek(p)
+	| (l, `Tret):
+		toknext(p)
+		auxty = tylist(p)
+	| _:
+		auxty = [][:]
+	;;
+	-> `std.Some (trs, param, auxty)
 }
 
 const traitlist = {p
-	var traits
+	var trnames
 
-	traits = [][:]
+	trnames = [][:]
 	match tokpeek(p)
-	| (l, `Tident id):
-		match name(p)
-		| `std.Some n:	std.slpush(&traits, n)
-		| `std.None:	err(p.loc, "expected name in trait\n")
-		;;
-	| (_, `Toparen):
-		toknext(p)
+	| (_, `Tident id):
 		while true
 			match name(p)
-			| `std.Some n:	std.slpush(&traits, n)
+			| `std.Some n:	std.slpush(&trnames, n)
 			| `std.None:	err(p.loc, "expected name in trait list\n")
 			;;
 
@@ -1489,14 +1619,10 @@ const traitlist = {p
 			| (l, _):	break
 			;;
 		;;
-		match toknext(p)
-		| (l, `Tcparen):
-		| (l, tokbad):	err(l, "expected ')' ending trat list, got {}\n", tokbad)
-		;;
 	| (l, tokbad):
-		err(l, "expected traits after '::', got {}\n", tokbad)
+		-> `std.None
 	;;
-	-> traits
+	-> `std.Some trnames
 }
 
 const tystruct = {p, loc
@@ -1774,6 +1900,14 @@ const expectcsqbrac = {p, msg
 	| (l, `Tcsqbrac):	/* nothing */
 	| (l, tok):	err(l, "expected ']' in {}, got {}\n", msg, tok)
 	;;
+}
+
+const listsep = {p
+	match tokpeek(p)
+	| (l, `Tcomma): toknext(p)
+	| (l, tok): err(l, "expected ',', got {}\n", tok)
+	;;
+	optendlns(p)
 }
 
 const optendlns = {p

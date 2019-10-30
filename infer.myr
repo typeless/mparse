@@ -85,7 +85,7 @@ const inferexpr = {st, e
 	| &[.e=`Oderef a]:	inferderef(st, e, a)
 	| &[.e=`Olor (a, b)]:	inferbinlogical(st, e, a, b)
 	| &[.e=`Oland (a, b)]:	inferbinlogical(st, e, a, b)
-	| &[.e=`Olnot a]:	std.fatal("lnot: no inference for {}\n", e)
+	| &[.e=`Olnot a]:	inferexpr(st, a); unify(st, a.ty, mkty(a.loc, `Tybool))
 	| &[.e=`Oeq (a, b)]:	inferbinlogical(st, e, a, b)
 	| &[.e=`One (a, b)]:	inferbinlogical(st, e, a, b)
 	| &[.e=`Ogt (a, b)]:	inferbinlogical(st, e, a, b)
@@ -107,7 +107,7 @@ const inferexpr = {st, e
 	| &[.e=`Oslice (a, lo, hi)]:	std.fatal("idx: no inference for {}\n", e)
 	| &[.e=`Omemb (a, memb)]:	std.fatal("slice: no inference for {}\n", e)
 	| &[.e=`Osize a]:	std.fatal("size: no inference for {}\n", e)
-	| &[.e=`Ocall (a, args)]:	std.fatal("call: no inference for {}\n", e)
+	| &[.e=`Ocall (a, args)]:	infercall(st, e, args)
 	| &[.e=`Ocast (a, ty)]:	std.fatal("cast: no inference for {}\n", e)
 	| &[.e=`Otern (a, b, c)]: inferternop(st, e, a, b, c)
 	| &[.e=`Oret a]:	std.fatal("ret: no inference for {}\n", e)
@@ -118,9 +118,9 @@ const inferexpr = {st, e
 	| &[.e=`Ogap]:	std.fatal("gap: no inference for {}\n", e)
 	| &[.e=`Olit lit]:	inferlit(st, e, lit)
 	| &[.e=`Oucon (name, arg)]:	std.fatal("ucon: no inference for {}\n", e)
-	| &[.e=`Otup vals]:	std.fatal("tup: no inference for {}\n", e)
+	| &[.e=`Otup vals]:	infertuple(st, e, vals)
 	| &[.e=`Ostruct vals]:	std.fatal("struct: no inference for {}\n", e)
-	| &[.e=`Oarr vals]:	std.fatal("arr: no inference for {}\n", e)
+	| &[.e=`Oarr vals]:	inferarray(st, e, vals)
 	| &[.e=`Oidxlen]:	std.fatal("idxlen: no inference for {}\n", e)
 	;;
 }
@@ -258,6 +258,40 @@ const inferstab = {st, s
 }
 
 const inferfunc = {st, fn
+}
+
+const inferarray = {st, e, vals
+	for (idx, val) : vals
+		inferexpr(st, val)
+		match idx
+		| `std.Some i:
+			inferexpr(st, i)
+		| `std.None:
+		;;
+
+		inferexpr(st, val)
+		match e.ty.ty
+		| `Tyarray (base, _):
+			unify(st, base, val.ty)
+		| _:
+		;;
+	;;
+}
+
+const infertuple = {st, e, vals
+	for val : vals
+		inferexpr(st, val)
+		match e.ty.ty
+		| `Tytuple bases:
+			for b : bases
+				unify(st, b, val.ty)
+			;;
+		| _:
+		;;
+	;;
+}
+
+const infercall = {st, e, args
 }
 
 const addtrait = {ty, tr
