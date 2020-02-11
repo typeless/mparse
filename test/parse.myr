@@ -1,0 +1,82 @@
+use std
+use testr
+use mparse
+
+const main = {
+	testr.run([
+		[.name="empty", .fn=empty],
+		[.name="emptyfn", .fn=emptyfn],
+		[.name="ret", .fn=ret],
+		//[.name="foo", .fn=foo],
+	][:])
+}
+
+impl std.equatable mparse.dcl =
+	eq = {a, b
+		var exprx, expry
+
+		if a.init == b.init
+			-> true
+		;;
+
+		match a.init
+		| `std.Some e:
+			exprx = e
+		| `std.None:
+			-> false
+		;;
+		match b.init
+		| `std.Some e:
+			expry = e
+		| `std.None:
+			-> false
+		;;
+		-> std.eq(exprx, expry)
+	}
+;;
+
+impl std.equatable mparse.expr =
+	eq = {a, b
+		-> std.eq(a.e, b.e)
+	}
+;;
+
+impl std.equatable mparse.exprop =
+	eq = {a, b
+		-> a == b
+	}
+;;
+
+const parse = {c, name, in
+	var f, p
+
+	p = mparse.mkparser(name, in)
+	f = mparse.file(p)
+	mparse.infer(p, f)
+	-> f
+}
+
+const empty = {c
+	parse(c, "empty", "")
+}
+
+const emptyfn = {c
+	parse(c, "declfn", "const main = {;}")
+}
+
+const ret = {c
+	var f
+	f = parse(c, "ret", "const foo = {; -> 123}")
+	std.put("{}\n", f)
+}
+
+const foo = {c
+	var data
+
+	data = \
+	"const foo : uint64[1] = [" \
+	"	0x3ff0000000000000," \
+	"]"
+
+	parse(c, "foo", data)
+}
