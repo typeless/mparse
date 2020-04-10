@@ -5,6 +5,8 @@ use "types"
 use "tokdefs"
 
 pkg mparse =
+	const mkparser	: (name : byte[:], data : byte[:] -> parser#)
+
 	const tokinit	: (path : byte[:]	-> parser#)
 	const tokinitf	: (fd : std.fd, path : byte[:]	-> parser#)
 	const tokclose	: (ts : parser#	-> void)

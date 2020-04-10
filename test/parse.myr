@@ -1,0 +1,15 @@
+use mparse
+use testr
+
+const main = {
+	testr.run([
+		[.name = "empty", .fn = empty],
+	][:])
+}
+
+const empty = {c
+	var p, f
+
+	p = mparse.mkparser("empty", "")
+	f = mparse.file(p)
+}
